@@ -142,28 +142,111 @@ Focus on criteria that help distinguish between different levels of understandin
         return None
 
 def display_questions():
-    """Display generated or uploaded questions"""
-    questions_to_show = []
-    
+    """Display generated or uploaded questions with editing capabilities"""
+    # Get all questions
+    all_questions = []
     if 'generated_questions' in st.session_state:
-        questions_to_show.extend([f"🤖 {q}" for q in st.session_state.generated_questions])
-    
+        all_questions.extend(st.session_state.generated_questions)
     if 'uploaded_questions' in st.session_state:
-        questions_to_show.extend([f"📄 {q}" for q in st.session_state.uploaded_questions])
+        all_questions.extend(st.session_state.uploaded_questions)
     
-    if questions_to_show:
+    if all_questions:
         st.header("Questions")
-        for i, question in enumerate(questions_to_show, 1):
-            st.write(f"{i}. {question}")
         
-        # Option to download all questions
-        all_questions_text = '\n'.join([f"{i}. {q.split(' ', 1)[1]}" for i, q in enumerate(questions_to_show, 1)])
-        st.download_button(
-            label="Download All Questions",
-            data=all_questions_text,
-            file_name=f"oral_exam_questions_{st.session_state.get('topic', 'unknown')}.txt",
-            mime="text/plain"
-        )
+        # Initialize editing state
+        if 'editing_questions' not in st.session_state:
+            st.session_state.editing_questions = False
+        
+        # Toggle between view and edit modes
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            if st.button("✏️ Edit Questions" if not st.session_state.editing_questions else "👁️ View Mode", key="edit_questions_btn"):
+                st.session_state.editing_questions = not st.session_state.editing_questions
+                st.rerun()
+        
+        if st.session_state.editing_questions:
+            st.write("**Edit Mode:** Modify, add, or remove questions below")
+            
+            # Initialize editing questions if not exists
+            if 'editing_questions_list' not in st.session_state:
+                st.session_state.editing_questions_list = all_questions.copy()
+            
+            # Display editable questions
+            for i, question in enumerate(st.session_state.editing_questions_list):
+                col1, col2 = st.columns([5, 1])
+                with col1:
+                    new_question = st.text_area(
+                        f"Question {i+1}",
+                        value=question,
+                        key=f"question_{i}",
+                        height=60,
+                        label_visibility="collapsed"
+                    )
+                    st.session_state.editing_questions_list[i] = new_question
+                with col2:
+                    st.write("")  # Spacing
+                    if st.button("🗑️", key=f"delete_question_{i}", help="Delete this question"):
+                        st.session_state.editing_questions_list.pop(i)
+                        st.rerun()
+            
+            # Add new question
+            st.write("---")
+            new_question = st.text_area("Add new question:", key="new_question_input", height=60)
+            if st.button("➕ Add Question") and new_question.strip():
+                st.session_state.editing_questions_list.append(new_question.strip())
+                st.rerun()
+            
+            # Save/Cancel buttons
+            st.write("---")
+            col1, col2, col3 = st.columns([1, 1, 2])
+            with col1:
+                if st.button("💾 Save Changes", type="primary", key="save_questions"):
+                    # Filter out empty questions
+                    valid_questions = [q for q in st.session_state.editing_questions_list if q.strip()]
+                    
+                    # Update the original question lists
+                    # Clear existing questions
+                    if 'generated_questions' in st.session_state:
+                        del st.session_state.generated_questions
+                    if 'uploaded_questions' in st.session_state:
+                        del st.session_state.uploaded_questions
+                    
+                    # Store all questions as generated questions
+                    st.session_state.generated_questions = valid_questions
+                    
+                    # Clear editing state
+                    st.session_state.editing_questions = False
+                    if 'editing_questions_list' in st.session_state:
+                        del st.session_state.editing_questions_list
+                    
+                    st.success("Questions updated!")
+                    st.rerun()
+            with col2:
+                if st.button("❌ Cancel", key="cancel_questions"):
+                    st.session_state.editing_questions = False
+                    if 'editing_questions_list' in st.session_state:
+                        del st.session_state.editing_questions_list
+                    st.rerun()
+        else:
+            # View mode
+            questions_to_show = []
+            if 'generated_questions' in st.session_state:
+                questions_to_show.extend([f"🤖 {q}" for q in st.session_state.generated_questions])
+            if 'uploaded_questions' in st.session_state:
+                questions_to_show.extend([f"📄 {q}" for q in st.session_state.uploaded_questions])
+            
+            for i, question in enumerate(questions_to_show, 1):
+                st.write(f"{i}. {question}")
+            
+            # Option to download all questions
+            all_questions_text = '\n'.join([f"{i}. {q.split(' ', 1)[1] if ' ' in q else q}" for i, q in enumerate(questions_to_show, 1)])
+            with col2:
+                st.download_button(
+                    label="📥 Download Questions",
+                    data=all_questions_text,
+                    file_name=f"oral_exam_questions_{st.session_state.get('topic', 'unknown')}.txt",
+                    mime="text/plain"
+                )
 
 def display_rubric():
     """Display generated rubric with editing capabilities"""
