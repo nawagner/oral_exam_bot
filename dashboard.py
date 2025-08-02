@@ -74,6 +74,73 @@ def parse_uploaded_questions(uploaded_file):
         st.error(f"Error parsing file: {str(e)}")
         return None
 
+def generate_rubric(topic, questions, custom_prompt=None):
+    """Generate rubric using OpenRouter's Gemini 2.5 Flash model"""
+    api_key = os.getenv('OPENROUTER_API_KEY')
+    if not api_key:
+        st.error("Please set OPENROUTER_API_KEY environment variable")
+        return None
+    
+    questions_text = '\n'.join([f"{i+1}. {q}" for i, q in enumerate(questions)])
+    
+    if custom_prompt:
+        prompt = custom_prompt.format(topic=topic, questions=questions_text)
+    else:
+        prompt = f"""Create a comprehensive binary rubric for evaluating oral exam responses on the topic: {topic}
+
+Questions to be evaluated:
+{questions_text}
+
+Generate a rubric with 8-12 binary criteria (Yes/No) that covers these dimensions:
+- Content Knowledge & Accuracy
+- Communication & Clarity  
+- Critical Thinking & Analysis
+- Subject-Specific Skills
+- Engagement & Preparation
+
+For each criterion:
+1. Provide a clear, specific statement
+2. Make it binary (achievable with Yes/No)
+3. Ensure it's relevant to {topic}
+4. Make it measurable and objective
+
+Format as:
+□ [Criterion statement]
+□ [Criterion statement]
+etc.
+
+Focus on criteria that help distinguish between different levels of understanding and preparation."""
+    
+    try:
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1"
+        )
+        
+        response = client.chat.completions.create(
+            model="google/gemini-2.5-flash",
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        content = response.choices[0].message.content
+        
+        # Parse criteria from the response
+        criteria = []
+        for line in content.strip().split('\n'):
+            line = line.strip()
+            if line and ('□' in line or line.startswith('-') or line.startswith('•')):
+                # Clean up the criterion
+                criterion = line.replace('□', '').replace('-', '').replace('•', '').strip()
+                if criterion:
+                    criteria.append(criterion)
+        
+        return criteria
+    except Exception as e:
+        st.error(f"Error generating rubric: {str(e)}")
+        return None
+
 def display_questions():
     """Display generated or uploaded questions"""
     questions_to_show = []
@@ -95,6 +162,24 @@ def display_questions():
             label="Download All Questions",
             data=all_questions_text,
             file_name=f"oral_exam_questions_{st.session_state.get('topic', 'unknown')}.txt",
+            mime="text/plain"
+        )
+
+def display_rubric():
+    """Display generated rubric"""
+    if 'rubric_criteria' in st.session_state:
+        st.header("Evaluation Rubric")
+        st.write("Use this binary rubric to evaluate student responses:")
+        
+        for i, criterion in enumerate(st.session_state.rubric_criteria, 1):
+            st.write(f"☐ **{i}.** {criterion}")
+        
+        # Option to download rubric
+        rubric_text = '\n'.join([f"☐ {i}. {criterion}" for i, criterion in enumerate(st.session_state.rubric_criteria, 1)])
+        st.download_button(
+            label="Download Rubric",
+            data=rubric_text,
+            file_name=f"oral_exam_rubric_{st.session_state.get('topic', 'unknown')}.txt",
             mime="text/plain"
         )
 
@@ -141,7 +226,7 @@ if topic:
                     st.error("Failed to generate questions. Please check your API key.")
     
     with col2:
-        st.subheader("Upload Your Own Questions")
+        st.subheader("OR: Upload Your Own Questions")
         
         uploaded_file = st.file_uploader(
             "Choose a file with questions",
@@ -158,3 +243,79 @@ if topic:
                 st.error("Failed to parse questions from file.")
     
     display_questions()
+    
+    # Rubric Generation Section
+    if ('generated_questions' in st.session_state and st.session_state.generated_questions) or \
+       ('uploaded_questions' in st.session_state and st.session_state.uploaded_questions):
+        
+        st.header("Rubric Generation")
+        
+        # Get all questions for rubric generation
+        all_questions = []
+        if 'generated_questions' in st.session_state:
+            all_questions.extend(st.session_state.generated_questions)
+        if 'uploaded_questions' in st.session_state:
+            all_questions.extend(st.session_state.uploaded_questions)
+        
+        # Default prompt
+        default_prompt = """Create a comprehensive binary rubric for evaluating oral exam responses on the topic: {topic}
+
+Questions to be evaluated:
+{questions}
+
+Generate a rubric with 8-12 binary criteria (Yes/No) that covers these dimensions:
+- Content Knowledge & Accuracy
+- Communication & Clarity  
+- Critical Thinking & Analysis
+- Subject-Specific Skills
+- Engagement & Preparation
+
+For each criterion:
+1. Provide a clear, specific statement
+2. Make it binary (achievable with Yes/No)
+3. Ensure it's relevant to {topic}
+4. Make it measurable and objective
+
+Format as:
+□ [Criterion statement]
+□ [Criterion statement]
+etc.
+
+Focus on criteria that help distinguish between different levels of understanding and preparation."""
+        
+        # Initialize prompt in session state if not exists
+        if 'rubric_prompt' not in st.session_state:
+            st.session_state.rubric_prompt = default_prompt
+        
+        # Editable prompt section
+        with st.expander("Customize Rubric Generation Prompt", expanded=False):
+            st.write("Edit the prompt below to customize how the rubric is generated. Use `{topic}` and `{questions}` as placeholders.")
+            
+            custom_prompt = st.text_area(
+                "Rubric Generation Prompt",
+                value=st.session_state.rubric_prompt,
+                height=300,
+                help="Use {topic} and {questions} as placeholders that will be replaced with actual values"
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Reset to Default"):
+                    st.session_state.rubric_prompt = default_prompt
+                    st.rerun()
+            with col2:
+                if st.button("Save Prompt"):
+                    st.session_state.rubric_prompt = custom_prompt
+                    st.success("Prompt saved!")
+        
+        # Generate rubric button
+        if st.button("Generate Rubric", type="primary"):
+            with st.spinner("Generating rubric..."):
+                criteria = generate_rubric(topic, all_questions, st.session_state.rubric_prompt)
+                if criteria:
+                    st.session_state.rubric_criteria = criteria
+                    st.success(f"Generated rubric with {len(criteria)} criteria!")
+                else:
+                    st.error("Failed to generate rubric. Please check your API key and prompt.")
+    
+    display_rubric()
