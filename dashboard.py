@@ -166,22 +166,85 @@ def display_questions():
         )
 
 def display_rubric():
-    """Display generated rubric"""
+    """Display generated rubric with editing capabilities"""
     if 'rubric_criteria' in st.session_state:
         st.header("Evaluation Rubric")
-        st.write("Use this binary rubric to evaluate student responses:")
         
-        for i, criterion in enumerate(st.session_state.rubric_criteria, 1):
-            st.write(f"☐ **{i}.** {criterion}")
+        # Initialize editing state
+        if 'editing_rubric' not in st.session_state:
+            st.session_state.editing_rubric = False
         
-        # Option to download rubric
-        rubric_text = '\n'.join([f"☐ {i}. {criterion}" for i, criterion in enumerate(st.session_state.rubric_criteria, 1)])
-        st.download_button(
-            label="Download Rubric",
-            data=rubric_text,
-            file_name=f"oral_exam_rubric_{st.session_state.get('topic', 'unknown')}.txt",
-            mime="text/plain"
-        )
+        # Toggle between view and edit modes
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            if st.button("✏️ Edit Rubric" if not st.session_state.editing_rubric else "👁️ View Mode"):
+                st.session_state.editing_rubric = not st.session_state.editing_rubric
+                st.rerun()
+        
+        if st.session_state.editing_rubric:
+            st.write("**Edit Mode:** Modify, add, or remove criteria below")
+            
+            # Initialize editing criteria if not exists
+            if 'editing_criteria' not in st.session_state:
+                st.session_state.editing_criteria = st.session_state.rubric_criteria.copy()
+            
+            # Display editable criteria
+            for i, criterion in enumerate(st.session_state.editing_criteria):
+                col1, col2 = st.columns([5, 1])
+                with col1:
+                    new_criterion = st.text_input(
+                        f"Criterion {i+1}",
+                        value=criterion,
+                        key=f"criterion_{i}",
+                        label_visibility="collapsed"
+                    )
+                    st.session_state.editing_criteria[i] = new_criterion
+                with col2:
+                    if st.button("🗑️", key=f"delete_{i}", help="Delete this criterion"):
+                        st.session_state.editing_criteria.pop(i)
+                        st.rerun()
+            
+            # Add new criterion
+            st.write("---")
+            new_criterion = st.text_input("Add new criterion:", key="new_criterion")
+            if st.button("➕ Add Criterion") and new_criterion.strip():
+                st.session_state.editing_criteria.append(new_criterion.strip())
+                st.rerun()
+            
+            # Save/Cancel buttons
+            st.write("---")
+            col1, col2, col3 = st.columns([1, 1, 2])
+            with col1:
+                if st.button("💾 Save Changes", type="primary"):
+                    # Filter out empty criteria
+                    st.session_state.rubric_criteria = [c for c in st.session_state.editing_criteria if c.strip()]
+                    st.session_state.editing_rubric = False
+                    if 'editing_criteria' in st.session_state:
+                        del st.session_state.editing_criteria
+                    st.success("Rubric updated!")
+                    st.rerun()
+            with col2:
+                if st.button("❌ Cancel"):
+                    st.session_state.editing_rubric = False
+                    if 'editing_criteria' in st.session_state:
+                        del st.session_state.editing_criteria
+                    st.rerun()
+        else:
+            # View mode
+            st.write("Use this binary rubric to evaluate student responses:")
+            
+            for i, criterion in enumerate(st.session_state.rubric_criteria, 1):
+                st.write(f"☐ **{i}.** {criterion}")
+            
+            # Option to download rubric
+            rubric_text = '\n'.join([f"☐ {i}. {criterion}" for i, criterion in enumerate(st.session_state.rubric_criteria, 1)])
+            with col2:
+                st.download_button(
+                    label="📥 Download Rubric",
+                    data=rubric_text,
+                    file_name=f"oral_exam_rubric_{st.session_state.get('topic', 'unknown')}.txt",
+                    mime="text/plain"
+                )
 
 st.title("Oral Exam Bot")
 
