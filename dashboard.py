@@ -3,6 +3,7 @@ import json
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
+from elevenlabs import ElevenLabs
 
 # Load environment variables from .env file
 load_dotenv()
@@ -248,6 +249,93 @@ def display_questions():
                     mime="text/plain"
                 )
 
+def generate_speech(text):
+    """Generate speech from text using ElevenLabs flash-v25 model"""
+    api_key = os.getenv('ELEVENLABS_API_KEY')
+    if not api_key:
+        st.error("Please set ELEVENLABS_API_KEY environment variable")
+        return None
+    
+    try:
+        client = ElevenLabs(api_key=api_key)
+        
+        # Generate speech using flash-v25 model
+        audio = client.text_to_speech.convert(
+            text=text,
+            model_id="eleven_flash_v2_5",
+            voice_id="21m00Tcm4TlvDq8ikWAM"  # Rachel voice - clear and professional
+        )
+        
+        # Convert generator to bytes
+        audio_bytes = b""
+        for chunk in audio:
+            audio_bytes += chunk
+            
+        return audio_bytes
+            
+    except Exception as e:
+        st.error(f"Error generating speech: {str(e)}")
+        return None
+
+def display_voice_interface():
+    """Display voice question interface"""
+    if ('generated_questions' in st.session_state and st.session_state.generated_questions) or \
+       ('uploaded_questions' in st.session_state and st.session_state.uploaded_questions):
+        
+        st.header("🔊 Text-to-Speech Questions")
+        st.write("Select a question to have it read aloud using AI-generated speech.")
+        
+        # Get all questions
+        all_questions = []
+        if 'generated_questions' in st.session_state:
+            all_questions.extend(st.session_state.generated_questions)
+        if 'uploaded_questions' in st.session_state:
+            all_questions.extend(st.session_state.uploaded_questions)
+        
+        if all_questions:
+            # Question selection
+            selected_question = st.selectbox(
+                "Choose a question to read aloud:",
+                options=range(len(all_questions)),
+                format_func=lambda x: f"{x+1}. {all_questions[x][:60]}{'...' if len(all_questions[x]) > 60 else ''}",
+                index=0
+            )
+            
+            # Display selected question
+            st.write("**Selected Question:**")
+            st.write(f"{selected_question + 1}. {all_questions[selected_question]}")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔊 Generate Speech", type="primary"):
+                    with st.spinner("Generating speech..."):
+                        audio_bytes = generate_speech(all_questions[selected_question])
+                        
+                        if audio_bytes:
+                            st.session_state.generated_audio = audio_bytes
+                            st.success("Speech generated successfully!")
+                        else:
+                            st.error("Failed to generate speech. Please try again.")
+            
+            with col2:
+                if st.button("🗑️ Clear Audio"):
+                    if 'generated_audio' in st.session_state:
+                        del st.session_state.generated_audio
+                    st.rerun()
+            
+            # Display generated audio
+            if 'generated_audio' in st.session_state:
+                st.subheader("Generated Speech")
+                st.audio(st.session_state.generated_audio, format="audio/mp3")
+                
+                # Option to download audio
+                st.download_button(
+                    label="📥 Download Audio",
+                    data=st.session_state.generated_audio,
+                    file_name=f"question_{selected_question + 1}_audio.mp3",
+                    mime="audio/mp3"
+                )
+
 def display_rubric():
     """Display generated rubric with editing capabilities"""
     if 'rubric_criteria' in st.session_state:
@@ -465,3 +553,5 @@ Focus on criteria that help distinguish between different levels of understandin
                     st.error("Failed to generate rubric. Please check your API key and prompt.")
     
     display_rubric()
+    
+    display_voice_interface()
