@@ -8,6 +8,42 @@ from elevenlabs import ElevenLabs
 # Load environment variables from .env file
 load_dotenv()
 
+# Available ElevenLabs voices with descriptions
+AVAILABLE_VOICES = {
+    "onwK4e9ZLuTAKqWW03F9": {
+        "name": "Daniel",
+        "description": "British male voice - Perfect for a nature documentary"
+    },
+    "AZnzlk1XvdvUeBnXmlld": {
+        "name": "Rachel",
+        "description": "A middle-aged female voice with an Africa-American accent - Calm with a hint of rasp"
+    },
+    "Xb7hH8MSUJpSbSDYk0k2": {
+        "name": "Alice",
+        "description": "Clear and engaging, friendly woman with a British accent."
+    },
+    "EXAVITQu4vr4xnSDxMaL": {
+        "name": "Bella",
+        "description": "American female voice - Youthful and engaging"
+    },
+    "ErXwobaYiN019PkySvjV": {
+        "name": "Antoni",
+        "description": "American male voice - Well-rounded and versatile"
+    },
+    "MF3mGyEYCl7XYWbV9V6O": {
+        "name": "Elli",
+        "description": "American female voice - Emotional and expressive"
+    },
+    "TxGEqnHWrfWFTfGW9XjX": {
+        "name": "Josh",
+        "description": "American male voice - Deep and resonant"
+    },
+    "VR6AewLTigWG4xSOukaG": {
+        "name": "Arnold",
+        "description": "American male voice - Crisp and clear"
+    }
+}
+
 def generate_questions(topic, num_questions, difficulty_level):
     """Generate questions using OpenRouter's Gemini 2.5 Flash model"""
     api_key = os.getenv('OPENROUTER_API_KEY')
@@ -281,14 +317,17 @@ def generate_speech(text):
         st.error("Please set ELEVENLABS_API_KEY environment variable")
         return None
     
+    # Get selected voice from session state, default to Daniel if not set
+    selected_voice_id = st.session_state.get('selected_voice_id', 'onwK4e9ZLuTAKqWW03F9')
+    
     try:
         client = ElevenLabs(api_key=api_key)
         
-        # Generate speech using flash-v25 model
+        # Generate speech using flash-v25 model with selected voice
         audio = client.text_to_speech.convert(
             text=text,
             model_id="eleven_flash_v2_5",
-            voice_id="21m00Tcm4TlvDq8ikWAM"  # Rachel voice - clear and professional
+            voice_id=selected_voice_id
         )
         
         # Convert generator to bytes
@@ -329,6 +368,34 @@ def display_voice_interface():
             # Display selected question
             st.write("**Selected Question:**")
             st.write(f"{selected_question + 1}. {all_questions[selected_question]}")
+            
+            # Voice selection
+            st.write("**Voice Selection:**")
+            
+            # Initialize default voice in session state if not exists
+            if 'selected_voice_id' not in st.session_state:
+                st.session_state.selected_voice_id = "onwK4e9ZLuTAKqWW03F9"  # Default to Daniel
+            
+            # Create voice options for selectbox
+            voice_options = []
+            voice_labels = []
+            for voice_id, voice_info in AVAILABLE_VOICES.items():
+                voice_options.append(voice_id)
+                voice_labels.append(f"{voice_info['name']} - {voice_info['description']}")
+            
+            # Get current index for selectbox
+            current_index = voice_options.index(st.session_state.selected_voice_id) if st.session_state.selected_voice_id in voice_options else 0
+            
+            selected_voice_index = st.selectbox(
+                "Choose a voice:",
+                options=range(len(voice_options)),
+                format_func=lambda x: voice_labels[x],
+                index=current_index,
+                key="voice_selector"
+            )
+            
+            # Update session state with selected voice
+            st.session_state.selected_voice_id = voice_options[selected_voice_index]
             
             col1, col2 = st.columns(2)
             with col1:
