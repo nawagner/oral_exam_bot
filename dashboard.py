@@ -453,24 +453,46 @@ def display_voice_interface():
         
         # Speech-to-Text Section
         st.header("🎤 Speech-to-Text")
-        st.write("Upload an audio file of student responses to transcribe to text using AI.")
+        st.write("Record audio directly or upload a file of student responses to transcribe to text using AI.")
         
-        # Audio file upload
-        uploaded_audio = st.file_uploader(
-            "Choose an audio file",
-            type=['mp3', 'wav', 'm4a', 'flac', 'ogg', 'webm'],
-            help="Upload audio in MP3, WAV, M4A, FLAC, OGG, or WebM format"
+        # Audio input options
+        audio_option = st.radio(
+            "Choose audio input method:",
+            options=["Record Audio", "Upload File"],
+            horizontal=True
         )
         
-        if uploaded_audio is not None:
-            st.write("**Uploaded Audio:**")
-            st.audio(uploaded_audio, format="audio/wav")
-            
+        audio_to_transcribe = None
+        audio_source = ""
+        
+        if audio_option == "Record Audio":
+            # Direct audio recording
+            recorded_audio = st.audio_input("Record your response:")
+            if recorded_audio is not None:
+                audio_to_transcribe = recorded_audio
+                audio_source = "recorded_audio"
+                st.write("**Recorded Audio:**")
+                st.audio(recorded_audio)
+        
+        else:  # Upload File
+            # Audio file upload
+            uploaded_audio = st.file_uploader(
+                "Choose an audio file",
+                type=['mp3', 'wav', 'm4a', 'flac', 'ogg', 'webm'],
+                help="Upload audio in MP3, WAV, M4A, FLAC, OGG, or WebM format"
+            )
+            if uploaded_audio is not None:
+                audio_to_transcribe = uploaded_audio
+                audio_source = uploaded_audio.name.split('.')[0]
+                st.write("**Uploaded Audio:**")
+                st.audio(uploaded_audio)
+        
+        if audio_to_transcribe is not None:
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("🔤 Transcribe Audio", type="primary"):
                     with st.spinner("Transcribing audio..."):
-                        transcript = transcribe_audio(uploaded_audio)
+                        transcript = transcribe_audio(audio_to_transcribe)
                         
                         if transcript:
                             st.session_state.transcript = transcript
@@ -498,7 +520,7 @@ def display_voice_interface():
                 st.download_button(
                     label="📥 Download Transcript",
                     data=st.session_state.transcript,
-                    file_name=f"transcript_{uploaded_audio.name.split('.')[0]}.txt",
+                    file_name=f"transcript_{audio_source}.txt",
                     mime="text/plain"
                 )
 
