@@ -106,16 +106,16 @@ For each criterion:
 4. Make it measurable and objective
 
 Format as:
-Q1
-☐ [Criterion statement]
-☐ [Criterion statement]
-Q2
-☐ [Criterion statement]
-☐ [Criterion statement]
-etc.
 Overall
-☐ [Criterion statement]
-☐ [Criterion statement]
+□ [Criterion statement]
+□ [Criterion statement]
+Q1
+□ [Criterion statement]
+□ [Criterion statement]
+Q2
+□ [Criterion statement]
+□ [Criterion statement]
+etc.
 
 Focus on criteria that help distinguish between different levels of understanding and preparation."""
     
@@ -134,17 +134,54 @@ Focus on criteria that help distinguish between different levels of understandin
         
         content = response.choices[0].message.content
         
-        # Parse criteria from the response
-        criteria = []
-        for line in content.strip().split('\n'):
-            line = line.strip()
-            if line and ('□' in line or line.startswith('-') or line.startswith('•')):
-                # Clean up the criterion
-                criterion = line.replace('□', '').replace('-', '').replace('•', '').strip()
-                if criterion:
-                    criteria.append(criterion)
+        # Parse criteria from the response with section structure
+        rubric_sections = {}
+        current_section = "Overall"
+        lines = content.strip().split('\n')
         
-        return criteria
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Check if line is a section header
+            if line == 'Overall' or (line.startswith('Q') and len(line) <= 3 and line[1:].isdigit()):
+                current_section = line
+                if current_section not in rubric_sections:
+                    rubric_sections[current_section] = []
+                continue
+            
+            # Check if line contains a criterion
+            is_criterion = False
+            criterion = line
+            
+            # Handle various bullet/checkbox formats
+            if '□' in line or '☐' in line or '☑' in line or '✓' in line:
+                criterion = line.replace('□', '').replace('☐', '').replace('☑', '').replace('✓', '').strip()
+                is_criterion = True
+            elif line.startswith(('-', '•', '*', '+')):
+                criterion = line[1:].strip()
+                is_criterion = True
+            elif line[0:2] in ['1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.'] or line[0:3] in ['10.', '11.', '12.']:
+                # Handle numbered lists
+                criterion = line.split('.', 1)[1].strip() if '.' in line else line
+                is_criterion = True
+            elif len(line) > 10 and ('student' in line.lower() or 'demonstrate' in line.lower() or 
+                                   'shows' in line.lower() or 'provides' in line.lower() or 
+                                   'explains' in line.lower() or 'uses' in line.lower()):
+                # Fallback for criterion-like content without explicit formatting
+                is_criterion = True
+            
+            if is_criterion and criterion and len(criterion) > 5:
+                # Remove any remaining formatting artifacts
+                criterion = criterion.replace('**', '').replace('__', '').strip()
+                if criterion and not criterion.endswith(':'):
+                    # Ensure current section exists
+                    if current_section not in rubric_sections:
+                        rubric_sections[current_section] = []
+                    rubric_sections[current_section].append(criterion)
+                    
+        return rubric_sections
     except Exception as e:
         st.error(f"Error generating rubric: {str(e)}")
         return None
@@ -345,7 +382,7 @@ def display_voice_interface():
 
 def display_rubric():
     """Display generated rubric with editing capabilities"""
-    if 'rubric_criteria' in st.session_state:
+    if 'rubric_sections' in st.session_state:
         st.header("Evaluation Rubric")
         
         # Initialize editing state
@@ -353,7 +390,7 @@ def display_rubric():
             st.session_state.editing_rubric = False
         
         # Toggle between view and edit modes
-        col1, col2, col3 = st.columns([1, 1, 2])
+        col1, col2 = st.columns([1, 3])
         with col1:
             if st.button("✏️ Edit Rubric" if not st.session_state.editing_rubric else "👁️ View Mode"):
                 st.session_state.editing_rubric = not st.session_state.editing_rubric
@@ -362,60 +399,80 @@ def display_rubric():
         if st.session_state.editing_rubric:
             st.write("**Edit Mode:** Modify, add, or remove criteria below")
             
-            # Initialize editing criteria if not exists
-            if 'editing_criteria' not in st.session_state:
-                st.session_state.editing_criteria = st.session_state.rubric_criteria.copy()
+            # Initialize editing sections if not exists
+            if 'editing_sections' not in st.session_state:
+                st.session_state.editing_sections = {k: v.copy() for k, v in st.session_state.rubric_sections.items()}
             
-            # Display editable criteria
-            for i, criterion in enumerate(st.session_state.editing_criteria):
-                col1, col2 = st.columns([5, 1])
-                with col1:
-                    new_criterion = st.text_input(
-                        f"Criterion {i+1}",
-                        value=criterion,
-                        key=f"criterion_{i}",
-                        label_visibility="collapsed"
-                    )
-                    st.session_state.editing_criteria[i] = new_criterion
-                with col2:
-                    if st.button("🗑️", key=f"delete_{i}", help="Delete this criterion"):
-                        st.session_state.editing_criteria.pop(i)
-                        st.rerun()
-            
-            # Add new criterion
-            st.write("---")
-            new_criterion = st.text_input("Add new criterion:", key="new_criterion")
-            if st.button("➕ Add Criterion") and new_criterion.strip():
-                st.session_state.editing_criteria.append(new_criterion.strip())
-                st.rerun()
+            # Display editable sections
+            for section_name, criteria in st.session_state.editing_sections.items():
+                st.subheader(f"**{section_name}**")
+                
+                for i, criterion in enumerate(criteria):
+                    col1, col2 = st.columns([5, 1])
+                    with col1:
+                        new_criterion = st.text_input(
+                            f"{section_name} Criterion {i+1}",
+                            value=criterion,
+                            key=f"criterion_{section_name}_{i}",
+                            label_visibility="collapsed"
+                        )
+                        st.session_state.editing_sections[section_name][i] = new_criterion
+                    with col2:
+                        if st.button("🗑️", key=f"delete_{section_name}_{i}", help="Delete this criterion"):
+                            st.session_state.editing_sections[section_name].pop(i)
+                            st.rerun()
+                
+                # Add new criterion to this section
+                new_criterion = st.text_input(f"Add new criterion to {section_name}:", key=f"new_criterion_{section_name}")
+                if st.button(f"➕ Add to {section_name}", key=f"add_{section_name}") and new_criterion.strip():
+                    st.session_state.editing_sections[section_name].append(new_criterion.strip())
+                    st.rerun()
+                
+                st.write("---")
             
             # Save/Cancel buttons
-            st.write("---")
-            col1, col2, col3 = st.columns([1, 1, 2])
+            col1, col2 = st.columns([1, 1])
             with col1:
                 if st.button("💾 Save Changes", type="primary"):
-                    # Filter out empty criteria
-                    st.session_state.rubric_criteria = [c for c in st.session_state.editing_criteria if c.strip()]
+                    # Filter out empty criteria and sections
+                    filtered_sections = {}
+                    for section, criteria in st.session_state.editing_sections.items():
+                        filtered_criteria = [c for c in criteria if c.strip()]
+                        if filtered_criteria:
+                            filtered_sections[section] = filtered_criteria
+                    
+                    st.session_state.rubric_sections = filtered_sections
                     st.session_state.editing_rubric = False
-                    if 'editing_criteria' in st.session_state:
-                        del st.session_state.editing_criteria
+                    if 'editing_sections' in st.session_state:
+                        del st.session_state.editing_sections
                     st.success("Rubric updated!")
                     st.rerun()
             with col2:
                 if st.button("❌ Cancel"):
                     st.session_state.editing_rubric = False
-                    if 'editing_criteria' in st.session_state:
-                        del st.session_state.editing_criteria
+                    if 'editing_sections' in st.session_state:
+                        del st.session_state.editing_sections
                     st.rerun()
         else:
             # View mode
-            st.write("Use this binary rubric to evaluate student responses:")
+            st.write("Use this structured binary rubric to evaluate student responses:")
             
-            for i, criterion in enumerate(st.session_state.rubric_criteria, 1):
-                st.write(f"**{i}.** {criterion}")
+            for section_name, criteria in st.session_state.rubric_sections.items():
+                st.subheader(f"**{section_name}**")
+                
+                for criterion in criteria:
+                    st.write(f"☐ {criterion}")
+                
+                st.write("")  # Add spacing between sections
             
             # Option to download rubric
-            rubric_text = '\n'.join([f"☐ {i}. {criterion}" for i, criterion in enumerate(st.session_state.rubric_criteria, 1)])
+            rubric_lines = []
+            for section_name, criteria in st.session_state.rubric_sections.items():
+                rubric_lines.append(f"\n{section_name}")
+                for criterion in criteria:
+                    rubric_lines.append(f"☐ {criterion}")
+            
+            rubric_text = '\n'.join(rubric_lines)
             with col2:
                 st.download_button(
                     label="📥 Download Rubric",
@@ -516,16 +573,16 @@ For each criterion:
 4. Make it measurable and objective
 
 Format as:
-Q1
-☐ [Criterion statement]
-☐ [Criterion statement]
-Q2
-☐ [Criterion statement]
-☐ [Criterion statement]
-etc.
 Overall
-☐ [Criterion statement]
-☐ [Criterion statement]
+□ [Criterion statement]
+□ [Criterion statement]
+Q1
+□ [Criterion statement]
+□ [Criterion statement]
+Q2
+□ [Criterion statement]
+□ [Criterion statement]
+etc.
 
 Focus on criteria that help distinguish between different levels of understanding and preparation."""
         
@@ -557,10 +614,11 @@ Focus on criteria that help distinguish between different levels of understandin
         # Generate rubric button
         if st.button("Generate Rubric", type="primary"):
             with st.spinner("Generating rubric..."):
-                criteria = generate_rubric(topic, all_questions, st.session_state.rubric_prompt)
-                if criteria:
-                    st.session_state.rubric_criteria = criteria
-                    st.success(f"Generated rubric with {len(criteria)} criteria!")
+                rubric_sections = generate_rubric(topic, all_questions, st.session_state.rubric_prompt)
+                if rubric_sections:
+                    st.session_state.rubric_sections = rubric_sections
+                    total_criteria = sum(len(criteria) for criteria in rubric_sections.values())
+                    st.success(f"Generated rubric with {total_criteria} criteria across {len(rubric_sections)} sections!")
                 else:
                     st.error("Failed to generate rubric. Please check your API key and prompt.")
     
