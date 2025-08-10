@@ -92,7 +92,7 @@ def generate_rubric(topic, questions, custom_prompt=None):
 Questions to be evaluated:
 {questions_text}
 
-Generate a rubric with 8-12 binary criteria (Yes/No) that covers these dimensions:
+Generate a rubric with 6-10 binary criteria (Yes/No) that covers these dimensions:
 - Content Knowledge & Accuracy
 - Communication & Clarity  
 - Critical Thinking & Analysis
@@ -106,9 +106,16 @@ For each criterion:
 4. Make it measurable and objective
 
 Format as:
-□ [Criterion statement]
-□ [Criterion statement]
+Q1
+☐ [Criterion statement]
+☐ [Criterion statement]
+Q2
+☐ [Criterion statement]
+☐ [Criterion statement]
 etc.
+Overall
+☐ [Criterion statement]
+☐ [Criterion statement]
 
 Focus on criteria that help distinguish between different levels of understanding and preparation."""
     
@@ -232,9 +239,9 @@ def display_questions():
             # View mode
             questions_to_show = []
             if 'generated_questions' in st.session_state:
-                questions_to_show.extend([f"🤖 {q}" for q in st.session_state.generated_questions])
+                questions_to_show.extend([f"{q}" for q in st.session_state.generated_questions])
             if 'uploaded_questions' in st.session_state:
-                questions_to_show.extend([f"📄 {q}" for q in st.session_state.uploaded_questions])
+                questions_to_show.extend([f"{q}" for q in st.session_state.uploaded_questions])
             
             for i, question in enumerate(questions_to_show, 1):
                 st.write(f"{i}. {question}")
@@ -405,7 +412,7 @@ def display_rubric():
             st.write("Use this binary rubric to evaluate student responses:")
             
             for i, criterion in enumerate(st.session_state.rubric_criteria, 1):
-                st.write(f"☐ **{i}.** {criterion}")
+                st.write(f"**{i}.** {criterion}")
             
             # Option to download rubric
             rubric_text = '\n'.join([f"☐ {i}. {criterion}" for i, criterion in enumerate(st.session_state.rubric_criteria, 1)])
@@ -420,15 +427,13 @@ def display_rubric():
 st.title("Oral Exam Bot")
 
 st.write("""
-Welcome to the Oral Exam Bot! This application helps educators by:
+Welcome! This application helps educators conduct oral examinations by:
 
 - **Developing standardized questions** based on your chosen subject area
 - **Creating comprehensive rubrics** for consistent evaluation
 - **Generating follow-up questions** to probe deeper understanding
 - **Live exam participation** using speech-to-text and text-to-speech models
-- **Customizable personas** to adapt the bot's interaction style as desired
-
-It is designed to support teachers conducting oral exams without full automation.         
+- **Customizable personas** to adapt the bot's interaction style as desired         
 
 Get started by selecting your subject area and exam parameters below.
 """)
@@ -497,7 +502,7 @@ if topic:
 Questions to be evaluated:
 {questions}
 
-Generate a rubric with 8-12 binary criteria (Yes/No) that covers these dimensions:
+Generate a rubric with 6-10 binary criteria (Yes/No) that covers these dimensions:
 - Content Knowledge & Accuracy
 - Communication & Clarity  
 - Critical Thinking & Analysis
@@ -511,9 +516,16 @@ For each criterion:
 4. Make it measurable and objective
 
 Format as:
-□ [Criterion statement]
-□ [Criterion statement]
+Q1
+☐ [Criterion statement]
+☐ [Criterion statement]
+Q2
+☐ [Criterion statement]
+☐ [Criterion statement]
 etc.
+Overall
+☐ [Criterion statement]
+☐ [Criterion statement]
 
 Focus on criteria that help distinguish between different levels of understanding and preparation."""
         
@@ -523,7 +535,7 @@ Focus on criteria that help distinguish between different levels of understandin
         
         # Editable prompt section
         with st.expander("Customize Rubric Generation Prompt", expanded=False):
-            st.write("Edit the prompt below to customize how the rubric is generated. Use `{topic}` and `{questions}` as placeholders.")
+            st.write("Edit the prompt below to customize how the rubric is generated. Binary criteria are used by default as this makes it easier to evaluate if LLM judgments of the student responses are correct. Use `{topic}` and `{questions}` as placeholders.")
             
             custom_prompt = st.text_area(
                 "Rubric Generation Prompt",
