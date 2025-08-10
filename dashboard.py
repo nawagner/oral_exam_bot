@@ -341,6 +341,29 @@ def generate_speech(text):
         st.error(f"Error generating speech: {str(e)}")
         return None
 
+def transcribe_audio(audio_file):
+    """Transcribe audio to text using ElevenLabs Scribe"""
+    api_key = os.getenv('ELEVENLABS_API_KEY')
+    if not api_key:
+        st.error("Please set ELEVENLABS_API_KEY environment variable")
+        return None
+    
+    try:
+        client = ElevenLabs(api_key=api_key)
+        
+        # Reset file pointer to beginning
+        audio_file.seek(0)
+        
+        # Transcribe audio using ElevenLabs Scribe
+        transcript = client.speech_to_text.convert(
+            file=audio_file
+        )
+        
+        return transcript.text
+    except Exception as e:
+        st.error(f"Error transcribing audio: {str(e)}")
+        return None
+
 def display_voice_interface():
     """Display voice question interface"""
     if ('generated_questions' in st.session_state and st.session_state.generated_questions) or \
@@ -426,6 +449,57 @@ def display_voice_interface():
                     data=st.session_state.generated_audio,
                     file_name=f"question_{selected_question + 1}_audio.mp3",
                     mime="audio/mp3"
+                )
+        
+        # Speech-to-Text Section
+        st.header("🎤 Speech-to-Text")
+        st.write("Upload an audio file of student responses to transcribe to text using AI.")
+        
+        # Audio file upload
+        uploaded_audio = st.file_uploader(
+            "Choose an audio file",
+            type=['mp3', 'wav', 'm4a', 'flac', 'ogg', 'webm'],
+            help="Upload audio in MP3, WAV, M4A, FLAC, OGG, or WebM format"
+        )
+        
+        if uploaded_audio is not None:
+            st.write("**Uploaded Audio:**")
+            st.audio(uploaded_audio, format="audio/wav")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔤 Transcribe Audio", type="primary"):
+                    with st.spinner("Transcribing audio..."):
+                        transcript = transcribe_audio(uploaded_audio)
+                        
+                        if transcript:
+                            st.session_state.transcript = transcript
+                            st.success("Audio transcribed successfully!")
+                        else:
+                            st.error("Failed to transcribe audio. Please try again.")
+            
+            with col2:
+                if st.button("🗑️ Clear Transcript"):
+                    if 'transcript' in st.session_state:
+                        del st.session_state.transcript
+                    st.rerun()
+            
+            # Display transcript
+            if 'transcript' in st.session_state:
+                st.subheader("Transcribed Text")
+                st.text_area(
+                    "Transcript:",
+                    value=st.session_state.transcript,
+                    height=150,
+                    help="Transcribed text from the audio file"
+                )
+                
+                # Option to download transcript
+                st.download_button(
+                    label="📥 Download Transcript",
+                    data=st.session_state.transcript,
+                    file_name=f"transcript_{uploaded_audio.name.split('.')[0]}.txt",
+                    mime="text/plain"
                 )
 
 def display_rubric():
