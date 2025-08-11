@@ -356,6 +356,7 @@ def transcribe_audio(audio_file):
         
         # Transcribe audio using ElevenLabs Scribe
         transcript = client.speech_to_text.convert(
+            model_id="scribe_v1",
             file=audio_file
         )
         
