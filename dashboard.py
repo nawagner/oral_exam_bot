@@ -365,6 +365,53 @@ def transcribe_audio(audio_file):
         st.error(f"Error transcribing audio: {str(e)}")
         return None
 
+def evaluate_transcript(transcript, question, rubric_criteria):
+    """Evaluate transcript against rubric criteria using AI"""
+    api_key = os.getenv('OPENROUTER_API_KEY')
+    if not api_key:
+        st.error("Please set OPENROUTER_API_KEY environment variable")
+        return None
+    
+    criteria_text = '\n'.join([f"- {criterion}" for criterion in rubric_criteria])
+    
+    prompt = f"""You are an expert evaluator. Evaluate this student's oral response against the binary rubric criteria.
+
+QUESTION: {question}
+
+STUDENT RESPONSE: {transcript}
+
+RUBRIC CRITERIA (Binary - Yes/No):
+{criteria_text}
+
+For each criterion, provide:
+1. "YES" or "NO" assessment
+2. Brief justification (1-2 sentences)
+
+Format your response as:
+CRITERION 1: YES/NO - [Brief justification]
+CRITERION 2: YES/NO - [Brief justification]
+...
+
+Be fair but rigorous in your evaluation. Only mark "YES" if the criterion is clearly demonstrated in the response."""
+    
+    try:
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1"
+        )
+        
+        response = client.chat.completions.create(
+            model="google/gemini-2.5-flash",
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        return response.choices[0].message.content
+    except Exception as e:
+        st.error(f"Error evaluating transcript: {str(e)}")
+        return None
+
 def display_voice_interface():
     """Display voice question interface"""
     if ('generated_questions' in st.session_state and st.session_state.generated_questions) or \
@@ -524,6 +571,91 @@ def display_voice_interface():
                     file_name=f"transcript_{audio_source}.txt",
                     mime="text/plain"
                 )
+                
+                # Evaluation section - only show if rubric exists
+                if 'rubric_criteria' in st.session_state and st.session_state.rubric_criteria:
+                    st.subheader("🎯 Answer Evaluation")
+                    st.write("Evaluate the transcribed response against the established rubric criteria.")
+                    
+                    # Get the current question being evaluated
+                    current_question = "General response"  # Default
+                    if 'generated_questions' in st.session_state or 'uploaded_questions' in st.session_state:
+                        all_questions = []
+                        if 'generated_questions' in st.session_state:
+                            all_questions.extend(st.session_state.generated_questions)
+                        if 'uploaded_questions' in st.session_state:
+                            all_questions.extend(st.session_state.uploaded_questions)
+                        
+                        # Try to get the selected question from earlier in the function
+                        # This will use the question that was selected for speech generation
+                        if all_questions and len(all_questions) > 0:
+                            # Default to first question if we can't determine which was selected
+                            current_question = all_questions[0]
+                    
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        if st.button("⚖️ Evaluate Response", type="primary"):
+                            with st.spinner("Evaluating response against rubric..."):
+                                evaluation = evaluate_transcript(
+                                    st.session_state.transcript,
+                                    current_question,
+                                    st.session_state.rubric_criteria
+                                )
+                                
+                                if evaluation:
+                                    st.session_state.evaluation_result = evaluation
+                                    st.success("Response evaluated successfully!")
+                                else:
+                                    st.error("Failed to evaluate response. Please try again.")
+                    
+                    with col2:
+                        if st.button("🗑️ Clear Evaluation"):
+                            if 'evaluation_result' in st.session_state:
+                                del st.session_state.evaluation_result
+                            st.rerun()
+                    
+                    # Display evaluation results
+                    if 'evaluation_result' in st.session_state:
+                        st.subheader("Evaluation Results")
+                        
+                        # Parse and display the evaluation results
+                        evaluation_lines = st.session_state.evaluation_result.strip().split('\n')
+                        yes_count = 0
+                        total_criteria = len(st.session_state.rubric_criteria)
+                        
+                        for line in evaluation_lines:
+                            if line.strip() and ':' in line:
+                                # Extract YES/NO from each line
+                                if 'YES' in line.upper():
+                                    yes_count += 1
+                                    st.success(f"✅ {line}")
+                                elif 'NO' in line.upper():
+                                    st.error(f"❌ {line}")
+                                else:
+                                    st.info(line)
+                        
+                        # Calculate and display overall score
+                        if total_criteria > 0:
+                            score_percentage = (yes_count / total_criteria) * 100
+                            st.subheader("Overall Score")
+                            
+                            # Color-coded score display
+                            if score_percentage >= 80:
+                                st.success(f"🏆 Excellent: {yes_count}/{total_criteria} criteria met ({score_percentage:.1f}%)")
+                            elif score_percentage >= 60:
+                                st.warning(f"📈 Good: {yes_count}/{total_criteria} criteria met ({score_percentage:.1f}%)")
+                            else:
+                                st.error(f"📉 Needs Improvement: {yes_count}/{total_criteria} criteria met ({score_percentage:.1f}%)")
+                        
+                        # Option to download evaluation
+                        st.download_button(
+                            label="📥 Download Evaluation",
+                            data=st.session_state.evaluation_result,
+                            file_name=f"evaluation_{audio_source}.txt",
+                            mime="text/plain"
+                        )
+                else:
+                    st.info("💡 Generate a rubric first to enable response evaluation.")
 
 def display_rubric():
     """Display generated rubric with editing capabilities"""
